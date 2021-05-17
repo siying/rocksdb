@@ -1689,8 +1689,8 @@ Status CompactionJob::OpenCompactionOutputFile(
 
   // Pass temperature of botommost files to FileSystem.
   FileOptions fo_copy = file_options_;
-  Temperature temperature = Temperature::kUnknown;
-  if (bottommost_level_) {
+  Temperature temperature = sub_compact->compaction->output_temperature();
+  if (temperature == Temperature::kUnknown && bottommost_level_) {
     fo_copy.temperature = temperature =
         sub_compact->compaction->mutable_cf_options()->bottommost_temperature;
   }
