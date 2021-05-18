@@ -2602,10 +2602,7 @@ void VersionStorageInfo::ComputeCompactionScore(
           // happens first.
           score = std::max(
               static_cast<double>(num_sorted_runs) /
-                  (std::max(
-                       mutable_cf_options.level0_file_num_compaction_trigger,
-                       2) -
-                   1),
+                  mutable_cf_options.level0_file_num_compaction_trigger,
               score);
         }
         if (mutable_cf_options.ttl > 0) {

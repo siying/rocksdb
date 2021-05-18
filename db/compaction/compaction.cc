@@ -308,7 +308,9 @@ bool Compaction::IsTrivialMove() const {
     return false;
   }
 
-  if (cfd_->ioptions()->compaction_style == kCompactionStyleFIFO) {
+  if (start_level_ == output_level_) {
+    // It doesn't make sense if compaction picker picks files just to trivial
+    // move to the same level.
     return false;
   }
 
