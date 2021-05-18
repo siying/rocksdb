@@ -308,6 +308,10 @@ bool Compaction::IsTrivialMove() const {
     return false;
   }
 
+  if (cfd_->ioptions()->compaction_style == kCompactionStyleFIFO) {
+    return false;
+  }
+
   // Used in universal compaction, where trivial move can be done if the
   // input files are non overlapping
   if ((mutable_cf_options_.compaction_options_universal.allow_trivial_move) &&

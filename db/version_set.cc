@@ -2598,10 +2598,14 @@ void VersionStorageInfo::ComputeCompactionScore(
             mutable_cf_options.compaction_options_fifo.age_for_warm > 0) {
           // Warm tier move can happen at any time. It's too expensive to
           // check very file's timestamp now. For now, just trigger it
-          // more frequently.
+          // slightly more frequently than FIFO compaction so that this
+          // happens first.
           score = std::max(
               static_cast<double>(num_sorted_runs) /
-                  mutable_cf_options.level0_file_num_compaction_trigger,
+                  (std::max(
+                       mutable_cf_options.level0_file_num_compaction_trigger,
+                       2) -
+                   1),
               score);
         }
         if (mutable_cf_options.ttl > 0) {

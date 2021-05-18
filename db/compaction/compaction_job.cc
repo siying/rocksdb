@@ -1691,9 +1691,10 @@ Status CompactionJob::OpenCompactionOutputFile(
   FileOptions fo_copy = file_options_;
   Temperature temperature = sub_compact->compaction->output_temperature();
   if (temperature == Temperature::kUnknown && bottommost_level_) {
-    fo_copy.temperature = temperature =
+    temperature =
         sub_compact->compaction->mutable_cf_options()->bottommost_temperature;
   }
+  fo_copy.temperature = temperature;
 
   Status s;
   IOStatus io_s = NewWritableFile(fs_.get(), fname, &writable_file, fo_copy);
