@@ -215,7 +215,7 @@ Compaction* FIFOCompactionPicker::PickCompactionToWarm(
     const std::string& cf_name, const MutableCFOptions& mutable_cf_options,
     const MutableDBOptions& mutable_db_options, VersionStorageInfo* vstorage,
     LogBuffer* log_buffer) {
-  if (mutable_cf_options.compaction_options_fifo.age_for_warm <= 0) {
+  if (mutable_cf_options.compaction_options_fifo.age_for_warm == 0) {
     return nullptr;
   }
 
