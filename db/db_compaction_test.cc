@@ -6637,6 +6637,16 @@ TEST_F(DBCompactionTest, FIFOWarm) {
   env_->SetMockSleep();
   Reopen(options);
 
+  int total_warm = 0;
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->SetCallBack(
+      "NewWritableFile::FileOptions.temperature", [&](void* arg) {
+        Temperature temperature = *(static_cast<Temperature*>(arg));
+        if (temperature == Temperature::kWarm) {
+          total_warm++;
+        }
+      });
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->EnableProcessing();
+
   // The file system does not support checksum handoff. The check
   // will be ignored.
   ASSERT_OK(Put(Key(0), "value1"));
@@ -6661,6 +6671,8 @@ TEST_F(DBCompactionTest, FIFOWarm) {
 
   ASSERT_OK(dbfull()->TEST_WaitForCompact());
 
+  ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->DisableProcessing();
+
   ColumnFamilyMetaData metadata;
   db_->GetColumnFamilyMetaData(&metadata);
   ASSERT_EQ(4, metadata.file_count);
@@ -6668,6 +6680,7 @@ TEST_F(DBCompactionTest, FIFOWarm) {
   ASSERT_EQ(Temperature::kUnknown, metadata.levels[0].files[1].temperature);
   ASSERT_EQ(Temperature::kWarm, metadata.levels[0].files[2].temperature);
   ASSERT_EQ(Temperature::kWarm, metadata.levels[0].files[3].temperature);
+  ASSERT_EQ(2, total_warm);
 
   Destroy(options);
 }
