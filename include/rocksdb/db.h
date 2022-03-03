@@ -10,11 +10,13 @@
 
 #include <stdint.h>
 #include <stdio.h>
+
 #include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
 #include "rocksdb/iterator.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/metadata.h"
@@ -25,6 +27,7 @@
 #include "rocksdb/transaction_log.h"
 #include "rocksdb/types.h"
 #include "rocksdb/version.h"
+#include "utilities/agg_merge/agg_merge.h"
 
 #ifdef _WIN32
 // Windows API macro interference
@@ -786,6 +789,30 @@ class DB {
   // Release a previously acquired snapshot.  The caller must not
   // use "snapshot" after this call.
   virtual void ReleaseSnapshot(const Snapshot* snapshot) = 0;
+
+  virtual Status Aggregate(const WriteOptions& options,
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           const Slice& function_name, const Slice& value) {
+    return Merge(options, column_family, key,
+                 EncodeHelper::EncodeFuncAndValue(function_name, value));
+  }
+
+  virtual Status GetAggregatedValue(const ReadOptions& options,
+                                    ColumnFamilyHandle* column_family,
+                                    const Slice& key, std::string* value) {
+    std::string my_value;
+    Status s = Get(options, column_family, key, &my_value);
+    if (s.ok()) {
+      Slice function;
+      Slice v;
+      if (EncodeHelper::ExtractFuncAndValue(my_value, &function, &v)) {
+        *value = v.ToString();
+      } else {
+        return Status::InvalidArgument("Not Aggregated key");
+      }
+    }
+    return s;
+  }
 
 #ifndef ROCKSDB_LITE
   // Contains all valid property arguments for GetProperty() or
