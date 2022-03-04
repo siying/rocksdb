@@ -9,6 +9,8 @@
 
 #include <deque>
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "rocksdb/merge_operator.h"
 #include "rocksdb/slice.h"
@@ -17,68 +19,109 @@
 #include "utilities/merge_operators.h"
 
 namespace ROCKSDB_NAMESPACE {
+static std::unordered_map<std::string, std::unique_ptr<Aggregator>> func_map;
+
+void AddAggregator(const std::string& function_name,
+                   std::unique_ptr<Aggregator>&& agg) {
+  func_map.emplace(function_name, std::move(agg));
+}
+
 AggMergeOperator::AggMergeOperator() {
+  AddAggregator("sum", std::make_unique<SumAggregator>());
+  AddAggregator("last3", std::make_unique<Last3Aggregator>());
 }
 
-std::string AggMergeOperator::EncodeIntValue(const Slice& function_name, int64_t value) {
-    std::string result = function_name.ToString() + ";";
-    PutVarsignedint64(&result, value);
-    return result;
+std::string EncodeHelper::EncodeFuncAndInt(const Slice& function_name,
+                                           int64_t value) {
+  std::string encoded_value;
+  PutVarsignedint64(&encoded_value, value);
+  return EncodeFuncAndValue(function_name, encoded_value);
 }
 
-namespace {
-bool ExtractFuncAndValue(const Slice& op,
-Slice* func, Slice* value) {
-  size_t fun_len = 0;
-  for (fun_len = 0; fun_len < op.size(); fun_len++) {
-    if (op.data()[fun_len] == ';') {
-      break;
-    }
+std::string EncodeHelper::EncodeInt(int64_t value) {
+  std::string encoded_value;
+  PutVarsignedint64(&encoded_value, value);
+  return encoded_value;
+}
+
+std::string EncodeHelper::EncodeFuncAndValue(const Slice& function_name,
+                                             const Slice& value) {
+  std::string result;
+  PutLengthPrefixedSlice(&result, function_name);
+  result += value.ToString();
+  return result;
+}
+
+std::string EncodeHelper::EncodeFuncAndList(const Slice& function_name,
+                                            const std::vector<Slice>& list) {
+  return EncodeFuncAndValue(function_name, EncodeList(list));
+}
+
+std::string EncodeHelper::EncodeList(const std::vector<Slice>& list) {
+  std::string result;
+  for (const Slice& entity : list) {
+    PutLengthPrefixedSlice(&result, entity);
   }
-  if (fun_len == op.size()) {
-    // Should not happen.
-    return false;
-  }
-  *func = Slice(op.data(), fun_len);
-  *value = Slice(op.data() + fun_len + 1, op.size() - fun_len - 1);
-  return true;
-}
+  return result;
 }
 
-class SumAccumulator {
- public:
-  void Add(const Slice& element) {
+bool EncodeHelper::ExtractFuncAndValue(const Slice& op, Slice* func,
+                                       Slice* value) {
+  *value = op;
+  return GetLengthPrefixedSlice(value, func);
+}
+
+std::string SumAggregator::Aggregate(const std::deque<Slice>& item_list) const {
+  int64_t sum = 0;
+  for (const Slice& item : item_list) {
     int64_t ivalue;
-    Slice v = element;
+    Slice v = item;
     bool ret = GetVarsignedint64(&v, &ivalue);
     assert(ret);
-    sum_ += ivalue;
+    sum += ivalue;
   }
+  std::string result;
+  return EncodeHelper::EncodeInt(sum);
+}
 
-  std::string GetResult() {
-    return AggMergeOperator::EncodeIntValue("sum", sum_);
+std::string Last3Aggregator::Aggregate(
+    const std::deque<Slice>& item_list) const {
+  std::vector<Slice> last3;
+  last3.reserve(3);
+  for (auto it = item_list.rbegin(); it != item_list.rend(); it++) {
+    Slice item = *it;
+    Slice entity;
+    bool ret;
+    while ((ret = GetLengthPrefixedSlice(&item, &entity))) {
+      last3.push_back(entity);
+      if (last3.size() >= 3) {
+        break;
+      }
+    }
+    if (last3.size() >= 3) {
+      break;
+    }
+    if (!ret) {
+      continue;
+    }
   }
- private:
-  int64_t sum_ = 0;
-};
+  return EncodeHelper::EncodeList(last3);
+}
 
 class Accumulator {
  public:
   void Add(const Slice& op) {
     Slice my_func;
     Slice my_value;
-    bool ret = ExtractFuncAndValue(op, &my_func, &my_value);
+    bool ret = EncodeHelper::ExtractFuncAndValue(op, &my_func, &my_value);
     assert(ret);
     assert(func_.empty() || func_ == my_func);
     func_ = my_func;
     values_.push_back(my_value);
   }
   std::string GetResult() {
-    SumAccumulator sum_agg;
-    for (Slice& v : values_) {
-      sum_agg.Add(v);
-    }
-    return sum_agg.GetResult();
+    return EncodeHelper::EncodeFuncAndValue(
+        func_, func_map.at(func_.ToString())->Aggregate(values_));
   }
  private:
   Slice func_;
@@ -96,7 +139,6 @@ bool AggMergeOperator::FullMergeV2(
   for (const Slice& op : merge_in.operand_list) {
     agg.Add(op);
   }
-
   std::string result = agg.GetResult();
   merge_out->new_value = result;
   return true;

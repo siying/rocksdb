@@ -847,6 +847,7 @@ set(SOURCES
         util/thread_local.cc
         util/threadpool_imp.cc
         util/xxhash.cc
+        utilities/agg_merge/agg_merge.cc
         utilities/backupable/backupable_db.cc
         utilities/blob_db/blob_compaction_filter.cc
         utilities/blob_db/blob_db.cc
@@ -1313,6 +1314,7 @@ if(WITH_TESTS)
         util/thread_list_test.cc
         util/thread_local_test.cc
         util/work_queue_test.cc
+        utilities/agg_merge/agg_merge_test.cc
         utilities/backupable/backupable_db_test.cc
         utilities/blob_db/blob_db_test.cc
         utilities/cassandra/cassandra_functional_test.cc

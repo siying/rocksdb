@@ -16,18 +16,27 @@ class AggMergeTest : public DBTestBase {
   AggMergeTest() : DBTestBase("agg_merge_db_test", /*env_do_fsync=*/true) {}
 };
 
-TEST_F(AggMergeTest, TestMerge) {
+TEST_F(AggMergeTest, TestSum) {
   Options options = CurrentOptions();
   options.merge_operator = std::make_shared<AggMergeOperator>();
   Reopen(options);
-  std::string v = AggMergeOperator::EncodeIntValue("sum", 10);
+  std::string v = EncodeHelper::EncodeFuncAndInt("sum", 10);
   ASSERT_OK(Merge("foo", v));
-  v = AggMergeOperator::EncodeIntValue("sum", 20);
+  v = EncodeHelper::EncodeFuncAndInt("sum", 20);
   ASSERT_OK(Merge("foo", v));
-  v = AggMergeOperator::EncodeIntValue("sum", 15);
+  v = EncodeHelper::EncodeFuncAndInt("sum", 15);
   ASSERT_OK(Merge("foo", v));
-  Flush();
-  EXPECT_EQ(AggMergeOperator::EncodeIntValue("sum", 45), Get("foo"));
+
+  v = EncodeHelper::EncodeFuncAndList("last3", {"a", "b"});
+  ASSERT_OK(Merge("bar", v));
+  v = EncodeHelper::EncodeFuncAndList("last3", {"c", "d", "e"});
+  ASSERT_OK(Merge("bar", v));
+  v = EncodeHelper::EncodeFuncAndList("last3", {"f"});
+  ASSERT_OK(Merge("bar", v));
+
+  EXPECT_EQ(EncodeHelper::EncodeFuncAndInt("sum", 45), Get("foo"));
+  EXPECT_EQ(EncodeHelper::EncodeFuncAndList("last3", {"f", "c", "d"}),
+            Get("bar"));
 }
 
 }  // namespace ROCKSDB_NAMESPACE
